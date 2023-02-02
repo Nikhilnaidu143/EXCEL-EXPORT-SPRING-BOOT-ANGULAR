@@ -1,0 +1,232 @@
+package com.kpmg.adc.services;
+
+import java.io.IOException;
+import java.util.List;
+
+import javax.servlet.ServletOutputStream;
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFFont;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import com.kpmg.adc.model.ClusterHeadSummaryDashboard;
+import com.kpmg.adc.model.FinalReviewerSummaryDashboard;
+import com.kpmg.adc.model.TeamInchargeSummaryDashboard;
+
+public class TimesheetExcelExporter {
+	private XSSFWorkbook workbook;
+	private XSSFSheet sheet;
+	private List<TimeSheet> timesheetsInMonth;
+
+	public TimesheetExcelExporter(List<TimeSheet> timesheetsInMonth) {
+		this.timesheetsInMonth = timesheetsInMonth;
+		workbook = new XSSFWorkbook();
+	}
+
+	private void writeHeaderLine() {
+		sheet = workbook.createSheet("Timesheet");
+
+		Row row = sheet.createRow(0);
+
+		CellStyle style = workbook.createCellStyle();
+		XSSFFont font = workbook.createFont();
+		font.setBold(true);
+		font.setFontHeight(16);
+		style.setFont(font);
+
+		createCell(row, 0, "Project Code", style);
+		createCell(row, 1, "Task Code", style);
+		createCell(row, 2, "Type", style);
+		createCell(row, 3, "Client Name", style);
+		createCell(row, 4, "Client Location", style);
+		createCell(row, 5, "Week Range", style);
+		createCell(row, 6, "Date", style);
+		createCell(row, 7, "Name Of Cluster Head", style);
+		createCell(row, 8, "Employee Name", style);
+		createCell(row, 9, "Employee Email ID", style);
+		createCell(row, 10, "Team Incharge", style);
+		createCell(row, 11, "Final Reviewer", style);
+		createCell(row, 12, "Designation", style);
+		createCell(row, 13, "Unit Of Measurement", style);
+		createCell(row, 14, "Sample Size", style);
+		createCell(row, 15, "Total Hours", style);
+		createCell(row, 16, "Expected Hours", style);
+		createCell(row, 17, "Work Performed", style);
+		createCell(row, 18, "Execution/Review", style);
+		createCell(row, 19, "Additional Remarks", style);
+		createCell(row, 20, "Status", style);
+
+	}
+
+	private void createCell(Row row, int columnCount, Object value, CellStyle style) {
+		sheet.autoSizeColumn(columnCount);
+		Cell cell = row.createCell(columnCount);
+		if (value instanceof Integer) {
+			cell.setCellValue((Integer) value);
+		} else if (value instanceof Boolean) {
+			cell.setCellValue((Boolean) value);
+		} else if (value instanceof Long) {
+			cell.setCellValue((Long) value);
+		} else if (value instanceof BigDecimal) {
+			cell.setCellValue((Double) value);
+		} else if (value instanceof Double) {
+			cell.setCellValue((Double) value);
+		} else {
+			cell.setCellValue((String) value);
+		}
+		cell.setCellStyle(style);
+	}
+
+	private void writeDataLines() throws ParseException {
+		int rowCount = 1;
+
+		CellStyle style = workbook.createCellStyle();
+		XSSFFont font = workbook.createFont();
+		font.setFontHeight(14);
+		style.setFont(font);
+
+		for (TimeSheet timesheet : timesheetsInMonth) {
+			Row row = sheet.createRow(rowCount++);
+			int columnCount = 0;
+
+			createCell(row, columnCount++, timesheet.getProjectCode(), style);
+			createCell(row, columnCount++, timesheet.getTaskCode(), style);
+			createCell(row, columnCount++, timesheet.getType(), style);
+			createCell(row, columnCount++, timesheet.getClientName(), style);
+			createCell(row, columnCount++, timesheet.getClientLocation(), style);
+			createCell(row, columnCount++, timesheet.getWeekRange(), style);
+			createCell(row, columnCount++, timesheet.getDate().toString(), style);
+			createCell(row, columnCount++, timesheet.getNameOfClusterHead().getFullName(), style);
+			createCell(row, columnCount++, timesheet.getEmployeeName().getFullName(), style);
+			createCell(row, columnCount++, timesheet.getEmployeeName().getEmailId(), style);
+			createCell(row, columnCount++, timesheet.getTeamIncharge().getFullName(), style);
+			createCell(row, columnCount++, timesheet.getFinalReviewer().getFullName(), style);
+			createCell(row, columnCount++, timesheet.getDesignation(), style);
+			createCell(row, columnCount++, timesheet.getUnitOfMeasurement(), style);
+			createCell(row, columnCount++, timesheet.getSampleSize(), style);
+			createCell(row, columnCount++, timesheet.getTotalHours().doubleValue(), style);
+			createCell(row, columnCount++, timesheet.getExpectedHours(), style);
+			createCell(row, columnCount++, timesheet.getWorkPerformed(), style);
+			createCell(row, columnCount++, timesheet.getExecutionOrReview(), style);
+			createCell(row, columnCount++, timesheet.getAdditionalRemarks(), style);
+			createCell(row, columnCount++, timesheet.getStatus().getLabel(), style);
+		}
+	}
+
+	public void export(HttpServletResponse response) throws IOException, ParseException {
+		writeHeaderLine();
+		writeDataLines();
+
+		ServletOutputStream outputStream = response.getOutputStream();
+		workbook.write(outputStream);
+		workbook.close();
+
+		outputStream.close();
+
+	}
+}
+
+
+
+--------------------------------------------------CONTROLLER----------------------------------------------------------
+
+@GetMapping(value = "/timesheets/export/excel")
+	public void exportToExcel(@RequestParam(value = "month") Integer month, @RequestParam(value = "year") Integer year,
+			@RequestParam(value = "weeks") List<String> weeks, HttpServletResponse response)
+			throws IOException, ParseException {
+		response.setContentType("application/octet-stream");
+		DateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss");
+		String currentDateTime = dateFormatter.format(new Date());
+
+		String headerKey = "Content-Disposition";
+		String headerValue = "attachment; filename=timesheets_" + currentDateTime + ".xlsx";
+		response.setHeader(headerKey, headerValue);
+		List<TimeSheet> timesheets = new ArrayList<>();
+		if (weeks.size() <= 0) {
+			timesheets = timesheetService.getTimesheetsBasedOnMonthAndYearForLoggedInUser(month, year);
+		} else {
+			timesheets = timesheetService.getTimesheetsWeekwiseToExport(weeks);
+		}
+		TimesheetExcelExporter excelExporter = new TimesheetExcelExporter(timesheets);
+		excelExporter.export(response);
+	}
+
+	@GetMapping(value = "/timesheets/myteam/export/excel")
+	public void exportExcelData(@RequestParam(value = "dashBoardType") String dashBoardType,
+			@RequestParam(value = "weekNumber", required = false) Integer weekNumber,
+			@RequestParam(value = "year") Integer year,
+			@RequestParam(value = "memberId", required = false) Long memberId,
+			@RequestParam(value = "reviewerId", required = false) Long reviewerId,
+			@RequestParam(value = "weeks") List<String> weeks, HttpServletResponse response)
+			throws ParseException, IOException {
+
+		response.setContentType("application/octet-stream");
+		DateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss");
+		String currentDateTime = dateFormatter.format(new Date());
+
+		String headerKey = "Content-Disposition";
+		String headerValue = "attachment; filename=timesheets_" + currentDateTime + ".xlsx";
+		response.setHeader(headerKey, headerValue);
+		List<TimeSheet> timesheets = new ArrayList<>();
+		if (weeks.size() <= 0 && weekNumber != null) {
+			if (dashBoardType.equalsIgnoreCase("teamIncharge")) {
+				timesheets = timesheetService.getTimesheetsForTeamInchargeExport(weekNumber, year, reviewerId);
+			} else if (dashBoardType.equalsIgnoreCase("clusterHead")) {
+				timesheets = timesheetService.getTimesheetsForClusterHeadExport(weekNumber, year, reviewerId);
+			} else {
+				timesheets = timesheetService.getTimesheetsForFinalReviewerExport(weekNumber, year, reviewerId);
+			}
+		}
+		if (weeks.size() > 0) {
+			if (dashBoardType.equalsIgnoreCase("teamIncharge")) {
+				timesheets = timesheetService.getTimesheetsForTeamInchargeExportForMultipleWeeks(weeks, year,
+						reviewerId);
+			} else if (dashBoardType.equalsIgnoreCase("clusterHead")) {
+				timesheets = timesheetService.getTimesheetsForClusterHeadExportForMultipleWeeks(weeks, year,
+						reviewerId);
+			} else {
+				timesheets = timesheetService.getTimesheetsForFinalReviewerExportForMultipleWeeks(weeks, year,
+						reviewerId);
+			}
+		}
+
+		TimesheetExcelExporter excelExporter = new TimesheetExcelExporter(timesheets);
+		excelExporter.export(response);
+	}
+
+
+--------------------------------------------------------ANGULAR----------------------------------------------------------
+import * as FileSaver from 'file-saver'; /** If you got error for file-save then run this command { npm install file-saver --save }*/
+
+exportDashboardData() {
+    var datePipe = new DatePipe('en-Us');
+    var currentDate = new Date();
+    var formattedDate = datePipe.transform(currentDate, 'yyyy-MM-dd_HH:mm:ss');
+
+    // if (this.selectedWeeks <= 0) {
+    if (this.page.totalElements > 0) {
+      var year = new Date().getFullYear();
+      this.timesheetService.getExcelData(parseInt(this.month) + 1, year, this.selectedWeeks).subscribe((res) => {
+        var b = new Blob([res], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-16le" });
+        FileSaver.saveAs(b, `timesheets_${formattedDate}.xlsx`);
+        this.toastrService.success("Timesheets exported successfully.");
+      }, err => {
+        this.toastrService.error("Failed to export data.");
+      });
+    } else {
+      this.toastrService.error("No data is available to export.");
+    }
+  }
+
+
+----------------------------------------------ANGULAR-SERVICE-------------------------------------------------------------
+
+getExcelData(month: any, year: any, weeks: any) {
+    return this.http.get<any>(CONTEXT_PATH + `/timesheets/export/excel?month=${month}&year=${year}&weeks=${weeks}`, { responseType: 'arraybuffer' as 'json' });
+}
+
+
